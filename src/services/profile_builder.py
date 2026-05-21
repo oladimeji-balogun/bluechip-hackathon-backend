@@ -118,9 +118,21 @@ class ProfileBuilder:
         # Category preferences
         cat_counter: Counter = Counter()
         avoided = []
+        # for r in reviews:
+        #     biz = (businesses or {}).get(r.get("business_id", ""), {})
+        #     for cat in biz.get("categories", "").split(", "):
+        #         cat = cat.strip()
+        #         if cat:
+        #             cat_counter[cat] += 1
+        #             if r.get("stars", 3) <= 2:
+        #                 avoided.append(cat)
+
         for r in reviews:
             biz = (businesses or {}).get(r.get("business_id", ""), {})
-            for cat in biz.get("categories", "").split(", "):
+            cats = biz.get("categories") or []
+            if isinstance(cats, str):
+                cats = [c.strip() for c in cats.split(",")]
+            for cat in cats:
                 cat = cat.strip()
                 if cat:
                     cat_counter[cat] += 1
@@ -134,13 +146,19 @@ class ProfileBuilder:
         )
 
         # Review history (lightweight)
+
+        cats = biz.get("categories") or []
+        if isinstance(cats, str):
+            cats = [c.strip() for c in cats.split(",")]
+
         history = []
         for r in recent:
             biz = (businesses or {}).get(r.get("business_id", ""), {})
             history.append(ReviewHistoryItem(
                 item_id=r.get("business_id", "unknown"),
                 item_name=biz.get("name", "Unknown"),
-                category=biz.get("categories", "General").split(",")[0].strip(),
+                # category=biz.get("categories", "General").split(",")[0].strip(),
+                category=cats[0] if cats else "General",
                 stars_given=r.get("stars", 3),
                 review_snippet=r.get("text", "")[:300],
                 date=r.get("date", "")[:10]

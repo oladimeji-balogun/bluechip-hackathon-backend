@@ -43,7 +43,7 @@ def build_agent_a_graph() -> StateGraph:
     )
 
     graph.add_edge("apply_nigerian", "build_response")
-    graph.add_edge("build_respnse", END)
+    graph.add_edge("build_response", END)
 
     return graph.compile()
 

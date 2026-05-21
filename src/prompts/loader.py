@@ -11,6 +11,6 @@ env = Environment(
     lstrip_blocks=True
 )
 
-def render_template(prompt_name: str, context: dict) -> str: 
-    template = env.get_template(name=prompt_name)
+def render_template(template_name: str, context: dict) -> str: 
+    template = env.get_template(name=template_name)
     return template.render(**context)

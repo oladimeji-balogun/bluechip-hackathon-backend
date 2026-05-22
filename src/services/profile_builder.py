@@ -27,7 +27,6 @@ PIDGIN_MARKERS = {
 }
 
 
-
 def detect_tone(reviews: list[dict], avg_stars: float) -> ReviewTone:
     if not reviews:
         return ReviewTone.BALANCED
@@ -118,14 +117,6 @@ class ProfileBuilder:
         # Category preferences
         cat_counter: Counter = Counter()
         avoided = []
-        # for r in reviews:
-        #     biz = (businesses or {}).get(r.get("business_id", ""), {})
-        #     for cat in biz.get("categories", "").split(", "):
-        #         cat = cat.strip()
-        #         if cat:
-        #             cat_counter[cat] += 1
-        #             if r.get("stars", 3) <= 2:
-        #                 avoided.append(cat)
 
         for r in reviews:
             biz = (businesses or {}).get(r.get("business_id", ""), {})
@@ -146,19 +137,17 @@ class ProfileBuilder:
         )
 
         # Review history (lightweight)
-
-        cats = biz.get("categories") or []
-        if isinstance(cats, str):
-            cats = [c.strip() for c in cats.split(",")]
-
         history = []
         for r in recent:
             biz = (businesses or {}).get(r.get("business_id", ""), {})
+            cats = biz.get("categories") or []
+            if isinstance(cats, str):
+                cats = [c.strip() for c in cats.split(",")]
+            category = cats[0] if cats else "General"
             history.append(ReviewHistoryItem(
                 item_id=r.get("business_id", "unknown"),
                 item_name=biz.get("name", "Unknown"),
-                # category=biz.get("categories", "General").split(",")[0].strip(),
-                category=cats[0] if cats else "General",
+                category=category,
                 stars_given=r.get("stars", 3),
                 review_snippet=r.get("text", "")[:300],
                 date=r.get("date", "")[:10]
@@ -190,9 +179,9 @@ class ProfileBuilder:
             profile_built_from_n_reviews=n,
             confidence_score=round(min(1.0, n / 20), 2)
         )
-    
 
-# batch processing 
+
+# batch processing
 def build_profiles_from_yelp(
     users_path: str,
     reviews_path: str,
@@ -208,16 +197,27 @@ def build_profiles_from_yelp(
             biz = json.loads(line)
             businesses[biz["business_id"]] = biz
 
-    print("Loading reviews...")
+    print("Loading target user IDs...")
+    target_users = set()
+    with open(users_path) as f:
+        for i, line in enumerate(f):
+            if limit and i >= limit:
+                break
+            user = json.loads(line)
+            uid = user.get("user_id")
+            if uid:
+                target_users.add(uid)
+
+    print(f"Loaded {len(target_users)} target users. Scanning reviews...")
     reviews_by_user: dict[str, list] = {}
     with open(reviews_path) as f:
-        for i, line in enumerate(f):
-            if limit and i >= limit * 10:
-                break
+        for line in f:
             r = json.loads(line)
             uid = r.get("user_id")
-            if uid:
+            if uid in target_users:
                 reviews_by_user.setdefault(uid, []).append(r)
+
+    print(f"Found reviews for {len(reviews_by_user)} users.")
 
     print("Building profiles...")
     builder = ProfileBuilder()
@@ -238,6 +238,7 @@ def build_profiles_from_yelp(
     with open(output_path, "w") as f:
         json.dump(profiles, f)
     print(f"Done. {len(profiles)} profiles written to {output_path}")
+
 
 
 if __name__ == "__main__":

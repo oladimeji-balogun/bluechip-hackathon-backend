@@ -16,6 +16,8 @@ class AgentB:
     def __init__(self): 
         self.groq = AsyncGroq(api_key=settings.GROQ_API_KEY)
         self.anthropic = AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        self.large_model = settings.TASK_B_MODEL
+        self.fast_model = settings.RATING_MODEL
 
     async def analyze_user(self, state: TaskBState) -> TaskBState:
         profile = state["profile"]
@@ -48,14 +50,24 @@ class AgentB:
         })
 
         response = await self.groq.chat.completions.create(
-            model=self.model,
+            model=self.fast_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=500,
         )
 
         raw = response.choices[0].message.content.strip()
-        raw = raw.replace("```json", "").replace("```", "").strip()
+        # raw = raw.replace("```json", "").replace("```", "").strip()
+
+        if "```json" in raw:
+            raw = raw.split("```json")[1].split("```")[0].strip()
+        elif "```" in raw:
+            raw = raw.split("```")[1].split("```")[0].strip()
+        else:
+            # Find the first { and last } and extract just that
+            start = raw.find("{")
+            end = raw.rfind("}") + 1
+            raw = raw[start:end]
 
         try:
             data = json.loads(raw)
@@ -89,10 +101,10 @@ class AgentB:
         })
 
         response = await self.groq.chat.completions.create(
-            model=self.model,
+            model=self.fast_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
-            max_tokens=800,
+            max_tokens=2000,
         )
 
         raw = response.choices[0].message.content.strip()
@@ -130,10 +142,10 @@ class AgentB:
         })
 
         response = await self.groq.chat.completions.create(
-            model=self.model,
+            model=self.fast_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.4,
-            max_tokens=800,
+            max_tokens=2000,
         )
 
         raw = response.choices[0].message.content.strip()
@@ -178,7 +190,7 @@ class AgentB:
         })
 
         response = await self.groq.chat.completions.create(
-            model=self.model,
+            model=self.fast_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=800,
@@ -229,7 +241,7 @@ class AgentB:
         })
 
         response = await self.groq.chat.completions.create(
-            model=self.model,
+            model=self.large_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
             max_tokens=1500,
@@ -275,7 +287,7 @@ class AgentB:
         })
 
         response = await self.groq.chat.completions.create(
-            model=self.model,
+            model=self.large_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.2,
             max_tokens=1000,

@@ -42,11 +42,13 @@ def build_graph_b():
 
     # graph edges 
     graph.add_conditional_edges(
-        "analyze_user", 
-        route_strategy, 
+        "analyze_user",
+        route_strategy,
         {
-            "rank_candidates": "rank_candidates", 
-            "build_response": "build_response"
+            "popularity_fallback": "popularity_fallback",
+            "cross_domain_retrieval": "cross_domain_retrieval",
+            "preference_retrieval": "preference_retrieval",
+            "build_response": "build_response",
         }
     )
 
@@ -77,10 +79,11 @@ def build_graph_b():
         }
     )
 
-    graph.add_edge("rank_candidate", "apply_context")
+    graph.add_edge("rank_candidates", "apply_context")
     graph.add_edge("apply_context", "build_response")
+    graph.add_edge("build_response", END)
 
-    return graph.compile
+    return graph.compile()
 
 
 agent_b_graph = build_graph_b()

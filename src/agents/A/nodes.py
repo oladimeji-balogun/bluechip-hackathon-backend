@@ -7,11 +7,10 @@ from ...schemas.user_profile import UserProfile, TaskAResponse
 from .state import TaskAState
 
 from ...prompts.loader import render_prompt
-from ...config import get_settings
+from ...config import settings
 
 import json
 
-settings = get_settings()
 
 
 class AgentA:
@@ -29,8 +28,8 @@ class AgentA:
             "confidence_score": profile.confidence_score,
             "total_reviews": profile.total_reviews, 
             "average_stars": profile.rating_behaviour.average_stars, 
-            "tend_to_inflate": profile.rating_behaviour.tends_to_inflate,
-            "tend_to_deflate": profile.rating_behaviour.tends_to_deflate, 
+            "tends_to_inflate": profile.rating_behaviour.tends_to_inflate,
+            "tends_to_deflate": profile.rating_behaviour.tends_to_deflate, 
             "distribution": profile.rating_behaviour.distribution,
             "top_categories": profile.category_preference.top_categories, 
             "avoided_categories": profile.category_preference.avoided_categories, 
@@ -40,12 +39,13 @@ class AgentA:
             "uses_pidgin": profile.writing_style.uses_pidgin,
             "uses_emoji": profile.writing_style.uses_emoji,
             "formality_score": profile.writing_style.formality_score,
+            "rating_std": profile.rating_behaviour.rating_std,
 
             "review_history": [
                 {
                     "item_name": r.item_name, 
                     "stars_given": r.stars_given, 
-                    "category": r.catgory, 
+                    "category": r.category, 
                     "review_snippet": r.review_snippet, 
                     "date": r.date
                 } for r in profile.review_history[:10]

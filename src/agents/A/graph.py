@@ -21,7 +21,7 @@ def build_agent_a_graph() -> StateGraph:
     graph.add_node("analyze_item", agent.analyze_item)
     graph.add_node("predict_rating", agent.predict_rating)
     graph.add_node("generate_review", agent.generate_review)
-    graph.add_node("apply_nigerian", agent.apply_nigerian_context)
+    graph.add_node("apply_nigerian_context", agent.apply_nigerian_context)
     graph.add_node("build_response", agent.build_response)
 
     # entry poing
@@ -37,12 +37,12 @@ def build_agent_a_graph() -> StateGraph:
         "generate_review", 
         should_apply_nigerian, 
         {
-            "apply_nigerian": "apply_nigerian", 
+            "apply_nigerian_context": "apply_nigerian_context", 
             "build_response": "build_response"
         }
     )
 
-    graph.add_edge("apply_nigerian", "build_response")
+    graph.add_edge("apply_nigerian_context", "build_response")
     graph.add_edge("build_response", END)
 
     return graph.compile()

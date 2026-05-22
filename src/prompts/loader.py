@@ -2,7 +2,16 @@ from pathlib import Path
 from jinja2 import FileSystemLoader, Environment, StrictUndefined
 
 
-PROMPTS_DIR = Path(__name__).parent 
+# PROMPTS_DIR = Path(__name__).resolve().parent
+
+
+PROMPTS_DIR = Path(__file__).resolve().parent
+while not (PROMPTS_DIR / "src" / "prompts").exists():
+    PROMPTS_DIR = PROMPTS_DIR.parent
+PROMPTS_DIR = PROMPTS_DIR / "src" / "prompts"
+
+print(f"prompts directory: {PROMPTS_DIR}")
+
 
 env = Environment(
     loader=FileSystemLoader(searchpath=PROMPTS_DIR), 
@@ -10,6 +19,7 @@ env = Environment(
     trim_blocks=True, 
     lstrip_blocks=True
 )
+
 
 def render_prompt(template_name: str, context: dict) -> str: 
     template = env.get_template(name=template_name)

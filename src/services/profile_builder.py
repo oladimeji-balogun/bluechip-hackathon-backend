@@ -100,7 +100,7 @@ class ProfileBuilder:
             distribution=dict(Counter(str(int(s)) for s in stars))
         )
 
-        # Writing style
+        # writing style
         word_counts = [len(r.get("text", "").split()) for r in reviews]
         avg_len = int(statistics.mean(word_counts)) if word_counts else 0
         all_text = " ".join(r.get("text", "") for r in reviews)
@@ -114,7 +114,7 @@ class ProfileBuilder:
             formality_score=min(1.0, avg_len / 200)
         )
 
-        # Category preferences
+        # category preferences
         cat_counter: Counter = Counter()
         avoided = []
 
@@ -136,7 +136,7 @@ class ProfileBuilder:
             cross_domain_signals=[c for c, _ in cat_counter.most_common(3)]
         )
 
-        # Review history (lightweight)
+        # review history (lightweight)
         history = []
         for r in recent:
             biz = (businesses or {}).get(r.get("business_id", ""), {})

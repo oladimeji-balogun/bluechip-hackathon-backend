@@ -10,8 +10,13 @@ def route_strategy(state: TaskBState) -> str:
     
     # hard override for cold start so as no to trust the LLM strategy
     profile = state["profile"]
+
+    print(f"DEBUG tier: {profile.tier}, reviews: {profile.total_reviews}")
+    
     if profile.tier == "cold" or profile.total_reviews < 5:
         return "popularity_fallback"
+    
+
     
     strategy = state.get("strategy", "preference_retrieval")
     if strategy == "popularity_fallback":

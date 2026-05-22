@@ -26,13 +26,13 @@ def build_catalogue(
         for line in f:
             biz = json.loads(line)
 
-            # Filter low-quality businesses
+            # filter low-quality businesses
             if biz.get("review_count", 0) < min_reviews:
                 continue
             if is_open_only and biz.get("is_open", 0) == 0:
                 continue
 
-            # Parse categories
+            # parse categories
             cats = biz.get("categories") or ""
             if isinstance(cats, str):
                 cats = [c.strip() for c in cats.split(",") if c.strip()]
@@ -58,7 +58,8 @@ def build_catalogue(
                 "review_count": biz.get("review_count", 0),
                 "price_range": price,
                 "is_open": biz.get("is_open", 0),
-                # Search text — what BM25 indexes
+
+                # Search text: what BM25 indexes
                 "search_text": f"{biz['name']} {' '.join(cats)} {biz.get('city', '')}"
             }
 

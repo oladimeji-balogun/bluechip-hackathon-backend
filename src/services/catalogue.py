@@ -69,7 +69,7 @@ class BusinessCatalogue:
         tokens = query.lower().split()
         scores = cls._bm25.get_scores(tokens)
 
-        # Pair scores with business IDs and sort
+        # pair scores with business IDs and sort
         scored = sorted(
             zip(scores, cls._index),
             key=lambda x: x[0],

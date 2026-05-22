@@ -82,46 +82,6 @@ class AgentB:
         return state
     
 
-    # async def popularity_fallback(self, state: TaskBState) -> TaskBState:
-    #     if state.get("error"):
-    #         return state
-
-    #     profile = state["profile"]
-    #     top_k = state["top_k"]
-
-    #     # Use whatever category signals exist even for cold users
-    #     top_cats = profile.category_preference.top_categories
-    #     category_hint = top_cats[0] if top_cats else "Restaurants"
-
-    #     prompt = render_prompt("task_b_popularity_fallback.md", {
-    #         "tier": profile.tier,
-    #         "category_hint": category_hint,
-    #         "domain": state.get("domain") or "not specified",
-    #         "context": state.get("context") or "not specified",
-    #         "nigerian_mode": state["nigerian_mode"],
-    #         "candidate_count": top_k * 2,
-    #     })
-
-    #     response = await self.groq.chat.completions.create(
-    #         model=self.fast_model,
-    #         messages=[{"role": "user", "content": prompt}],
-    #         temperature=0.4,
-    #         max_tokens=3000,
-    #     )
-
-    #     raw = response.choices[0].message.content.strip()
-    #     raw = raw.replace("```json", "").replace("```", "").strip()
-
-    #     try:
-    #         data = json.loads(raw)
-    #         state["candidates"] = data.get("candidates", [])
-    #     except (json.JSONDecodeError, ValueError) as e:
-    #         state["error"] = f"Popularity fallback parse failed: {e}"
-    #         return state
-
-    #     state["cold_start_used"] = True
-    #     return state
-
 
     async def popularity_fallback(self, state: TaskBState) -> TaskBState:
         if state.get("error"):
@@ -149,46 +109,6 @@ class AgentB:
         state["cold_start_used"] = True
         return state
         
-
-    # async def cross_domain_retrieval(self, state: TaskBState) -> TaskBState:
-    #     if state.get("error"):
-    #         return state
-
-    #     profile = state["profile"]
-    #     user_analysis = state["user_analysis"]
-    #     top_k = state["top_k"]
-
-    #     prompt = render_prompt("task_b_cross_domain.md", {
-    #         "user_values": user_analysis.get("user_values", ""),
-    #         "user_dislikes": user_analysis.get("user_dislikes", ""),
-    #         "transferable_signals": user_analysis.get("transferable_signals", ""),
-    #         "price_sensitivity": user_analysis.get("price_sensitivity", "medium"),
-    #         "context_signals": user_analysis.get("context_signals", ""),
-    #         "domain": state.get("domain") or "not specified",
-    #         "context": state.get("context") or "not specified",
-    #         "nigerian_mode": state["nigerian_mode"],
-    #         "candidate_count": top_k * 2,
-    #     })
-
-    #     response = await self.groq.chat.completions.create(
-    #         model=self.fast_model,
-    #         messages=[{"role": "user", "content": prompt}],
-    #         temperature=0.4,
-    #         max_tokens=3000,
-    #     )
-
-    #     raw = response.choices[0].message.content.strip()
-    #     raw = raw.replace("```json", "").replace("```", "").strip()
-
-    #     try:
-    #         data = json.loads(raw)
-    #         state["candidates"] = data.get("candidates", [])
-    #     except (json.JSONDecodeError, ValueError) as e:
-    #         state["error"] = f"Cross domain retrieval parse failed: {e}"
-    #         return state
-
-    #     state["cross_domain_used"] = True
-    #     return state
     
 
     async def cross_domain_retrieval(self, state: TaskBState) -> TaskBState:
@@ -222,53 +142,6 @@ class AgentB:
         return state
 
 
-
-    # async def preference_retrieval(self, state: TaskBState) -> TaskBState:
-    #     if state.get("error"):
-    #         return state
-
-    #     profile = state["profile"]
-    #     user_analysis = state["user_analysis"]
-    #     top_k = state["top_k"]
-
-    #     prompt = render_prompt("task_b_preference_retrieval.md", {
-    #         "user_values": user_analysis.get("user_values", ""),
-    #         "user_dislikes": user_analysis.get("user_dislikes", ""),
-    #         "top_categories": profile.category_preference.top_categories[:5],
-    #         "avoided_categories": profile.category_preference.avoided_categories,
-    #         "average_stars": profile.rating_behaviour.average_stars,
-    #         "price_sensitivity": user_analysis.get("price_sensitivity", "medium"),
-    #         "context_signals": user_analysis.get("context_signals", ""),
-    #         "highly_rated_history": [
-    #             f"{r.item_name} ({r.category}) — {r.stars_given}★"
-    #             for r in profile.review_history[:3] # was 5 before
-    #             if r.stars_given >= 4.0
-    #         ],
-    #         "domain": state.get("domain") or "not specified",
-    #         "context": state.get("context") or "not specified",
-    #         "nigerian_mode": state["nigerian_mode"],
-    #         "candidate_count": top_k,
-    #     })
-
-    #     response = await self.groq.chat.completions.create(
-    #         model=self.fast_model,
-    #         messages=[{"role": "user", "content": prompt}],
-    #         temperature=0.3,
-    #         max_tokens=800,
-    #     )
-
-    #     raw = response.choices[0].message.content.strip()
-    #     raw = raw.replace("```json", "").replace("```", "").strip()
-
-    #     try:
-    #         data = json.loads(raw)
-    #         state["candidates"] = data.get("candidates", [])
-    #     except (json.JSONDecodeError, ValueError) as e:
-    #         state["error"] = f"Preference retrieval parse failed: {e}"
-    #         return state
-
-    #     return state
-    
     async def preference_retrieval(self, state: TaskBState) -> TaskBState:
         if state.get("error"):
             return state

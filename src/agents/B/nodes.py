@@ -10,6 +10,8 @@ from ...config import settings
 
 from ...prompts.loader import render_prompt 
 
+from ...services.catalogue import BusinessCatalogue
+
 
 class AgentB: 
 
@@ -41,7 +43,7 @@ class AgentB:
                     "stars_given": r.stars_given,
                     "review_snippet": r.review_snippet,
                 }
-                for r in profile.review_history[:10]
+                for r in profile.review_history[:5] # was 10 before
             ],
             "domain": state.get("domain") or "not specified",
             "context": state.get("context") or "not specified",
@@ -50,7 +52,7 @@ class AgentB:
         })
 
         response = await self.groq.chat.completions.create(
-            model=self.fast_model,
+            model=self.large_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.1,
             max_tokens=500,
@@ -80,6 +82,47 @@ class AgentB:
         return state
     
 
+    # async def popularity_fallback(self, state: TaskBState) -> TaskBState:
+    #     if state.get("error"):
+    #         return state
+
+    #     profile = state["profile"]
+    #     top_k = state["top_k"]
+
+    #     # Use whatever category signals exist even for cold users
+    #     top_cats = profile.category_preference.top_categories
+    #     category_hint = top_cats[0] if top_cats else "Restaurants"
+
+    #     prompt = render_prompt("task_b_popularity_fallback.md", {
+    #         "tier": profile.tier,
+    #         "category_hint": category_hint,
+    #         "domain": state.get("domain") or "not specified",
+    #         "context": state.get("context") or "not specified",
+    #         "nigerian_mode": state["nigerian_mode"],
+    #         "candidate_count": top_k * 2,
+    #     })
+
+    #     response = await self.groq.chat.completions.create(
+    #         model=self.fast_model,
+    #         messages=[{"role": "user", "content": prompt}],
+    #         temperature=0.4,
+    #         max_tokens=3000,
+    #     )
+
+    #     raw = response.choices[0].message.content.strip()
+    #     raw = raw.replace("```json", "").replace("```", "").strip()
+
+    #     try:
+    #         data = json.loads(raw)
+    #         state["candidates"] = data.get("candidates", [])
+    #     except (json.JSONDecodeError, ValueError) as e:
+    #         state["error"] = f"Popularity fallback parse failed: {e}"
+    #         return state
+
+    #     state["cold_start_used"] = True
+    #     return state
+
+
     async def popularity_fallback(self, state: TaskBState) -> TaskBState:
         if state.get("error"):
             return state
@@ -87,38 +130,65 @@ class AgentB:
         profile = state["profile"]
         top_k = state["top_k"]
 
-        # Use whatever category signals exist even for cold users
+        # Use whatever category signal exists
         top_cats = profile.category_preference.top_categories
         category_hint = top_cats[0] if top_cats else "Restaurants"
+        domain = state.get("domain") or category_hint
 
-        prompt = render_prompt("task_b_popularity_fallback.md", {
-            "tier": profile.tier,
-            "category_hint": category_hint,
-            "domain": state.get("domain") or "not specified",
-            "context": state.get("context") or "not specified",
-            "nigerian_mode": state["nigerian_mode"],
-            "candidate_count": top_k * 2,
-        })
-
-        response = await self.groq.chat.completions.create(
-            model=self.fast_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=2000,
+        candidates = BusinessCatalogue.search(
+            query=domain,
+            top_k=top_k * 2,
+            min_stars=4.0   # higher threshold for cold start — only popular items
         )
 
-        raw = response.choices[0].message.content.strip()
-        raw = raw.replace("```json", "").replace("```", "").strip()
-
-        try:
-            data = json.loads(raw)
-            state["candidates"] = data.get("candidates", [])
-        except (json.JSONDecodeError, ValueError) as e:
-            state["error"] = f"Popularity fallback parse failed: {e}"
+        if not candidates:
+            state["error"] = "Popularity fallback returned no candidates"
             return state
 
+        state["candidates"] = candidates[:top_k * 2]
         state["cold_start_used"] = True
         return state
+        
+
+    # async def cross_domain_retrieval(self, state: TaskBState) -> TaskBState:
+    #     if state.get("error"):
+    #         return state
+
+    #     profile = state["profile"]
+    #     user_analysis = state["user_analysis"]
+    #     top_k = state["top_k"]
+
+    #     prompt = render_prompt("task_b_cross_domain.md", {
+    #         "user_values": user_analysis.get("user_values", ""),
+    #         "user_dislikes": user_analysis.get("user_dislikes", ""),
+    #         "transferable_signals": user_analysis.get("transferable_signals", ""),
+    #         "price_sensitivity": user_analysis.get("price_sensitivity", "medium"),
+    #         "context_signals": user_analysis.get("context_signals", ""),
+    #         "domain": state.get("domain") or "not specified",
+    #         "context": state.get("context") or "not specified",
+    #         "nigerian_mode": state["nigerian_mode"],
+    #         "candidate_count": top_k * 2,
+    #     })
+
+    #     response = await self.groq.chat.completions.create(
+    #         model=self.fast_model,
+    #         messages=[{"role": "user", "content": prompt}],
+    #         temperature=0.4,
+    #         max_tokens=3000,
+    #     )
+
+    #     raw = response.choices[0].message.content.strip()
+    #     raw = raw.replace("```json", "").replace("```", "").strip()
+
+    #     try:
+    #         data = json.loads(raw)
+    #         state["candidates"] = data.get("candidates", [])
+    #     except (json.JSONDecodeError, ValueError) as e:
+    #         state["error"] = f"Cross domain retrieval parse failed: {e}"
+    #         return state
+
+    #     state["cross_domain_used"] = True
+    #     return state
     
 
     async def cross_domain_retrieval(self, state: TaskBState) -> TaskBState:
@@ -129,39 +199,76 @@ class AgentB:
         user_analysis = state["user_analysis"]
         top_k = state["top_k"]
 
-        prompt = render_prompt("task_b_cross_domain.md", {
-            "user_values": user_analysis.get("user_values", ""),
-            "user_dislikes": user_analysis.get("user_dislikes", ""),
-            "transferable_signals": user_analysis.get("transferable_signals", ""),
-            "price_sensitivity": user_analysis.get("price_sensitivity", "medium"),
-            "context_signals": user_analysis.get("context_signals", ""),
-            "domain": state.get("domain") or "not specified",
-            "context": state.get("context") or "not specified",
-            "nigerian_mode": state["nigerian_mode"],
-            "candidate_count": top_k * 2,
-        })
+        # Use transferable signals and requested domain
+        transferable = user_analysis.get("transferable_signals", "")
+        domain = state.get("domain") or ""
+        query = f"{domain} {transferable}"
 
-        response = await self.groq.chat.completions.create(
-            model=self.fast_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.4,
-            max_tokens=2000,
+        candidates = BusinessCatalogue.search(
+            query=query,
+            top_k=top_k * 2,
+            min_stars=3.0
         )
 
-        raw = response.choices[0].message.content.strip()
-        raw = raw.replace("```json", "").replace("```", "").strip()
+        history_ids = {r.item_id for r in profile.review_history}
+        candidates = [c for c in candidates if c["item_id"] not in history_ids]
 
-        try:
-            data = json.loads(raw)
-            state["candidates"] = data.get("candidates", [])
-        except (json.JSONDecodeError, ValueError) as e:
-            state["error"] = f"Cross domain retrieval parse failed: {e}"
+        if not candidates:
+            state["error"] = "Cross domain retrieval returned no candidates"
             return state
 
+        state["candidates"] = candidates[:top_k * 2]
         state["cross_domain_used"] = True
         return state
-    
 
+
+
+    # async def preference_retrieval(self, state: TaskBState) -> TaskBState:
+    #     if state.get("error"):
+    #         return state
+
+    #     profile = state["profile"]
+    #     user_analysis = state["user_analysis"]
+    #     top_k = state["top_k"]
+
+    #     prompt = render_prompt("task_b_preference_retrieval.md", {
+    #         "user_values": user_analysis.get("user_values", ""),
+    #         "user_dislikes": user_analysis.get("user_dislikes", ""),
+    #         "top_categories": profile.category_preference.top_categories[:5],
+    #         "avoided_categories": profile.category_preference.avoided_categories,
+    #         "average_stars": profile.rating_behaviour.average_stars,
+    #         "price_sensitivity": user_analysis.get("price_sensitivity", "medium"),
+    #         "context_signals": user_analysis.get("context_signals", ""),
+    #         "highly_rated_history": [
+    #             f"{r.item_name} ({r.category}) — {r.stars_given}★"
+    #             for r in profile.review_history[:3] # was 5 before
+    #             if r.stars_given >= 4.0
+    #         ],
+    #         "domain": state.get("domain") or "not specified",
+    #         "context": state.get("context") or "not specified",
+    #         "nigerian_mode": state["nigerian_mode"],
+    #         "candidate_count": top_k,
+    #     })
+
+    #     response = await self.groq.chat.completions.create(
+    #         model=self.fast_model,
+    #         messages=[{"role": "user", "content": prompt}],
+    #         temperature=0.3,
+    #         max_tokens=800,
+    #     )
+
+    #     raw = response.choices[0].message.content.strip()
+    #     raw = raw.replace("```json", "").replace("```", "").strip()
+
+    #     try:
+    #         data = json.loads(raw)
+    #         state["candidates"] = data.get("candidates", [])
+    #     except (json.JSONDecodeError, ValueError) as e:
+    #         state["error"] = f"Preference retrieval parse failed: {e}"
+    #         return state
+
+    #     return state
+    
     async def preference_retrieval(self, state: TaskBState) -> TaskBState:
         if state.get("error"):
             return state
@@ -170,44 +277,28 @@ class AgentB:
         user_analysis = state["user_analysis"]
         top_k = state["top_k"]
 
-        prompt = render_prompt("task_b_preference_retrieval.md", {
-            "user_values": user_analysis.get("user_values", ""),
-            "user_dislikes": user_analysis.get("user_dislikes", ""),
-            "top_categories": profile.category_preference.top_categories[:5],
-            "avoided_categories": profile.category_preference.avoided_categories,
-            "average_stars": profile.rating_behaviour.average_stars,
-            "price_sensitivity": user_analysis.get("price_sensitivity", "medium"),
-            "context_signals": user_analysis.get("context_signals", ""),
-            "highly_rated_history": [
-                f"{r.item_name} ({r.category}) — {r.stars_given}★"
-                for r in profile.review_history[:5]
-                if r.stars_given >= 4.0
-            ],
-            "domain": state.get("domain") or "not specified",
-            "context": state.get("context") or "not specified",
-            "nigerian_mode": state["nigerian_mode"],
-            "candidate_count": top_k * 2,
-        })
+        # Build search query from user preferences
+        top_cats = " ".join(profile.category_preference.top_categories[:3])
+        query = f"{top_cats} {state.get('domain') or ''} {state.get('context') or ''}"
 
-        response = await self.groq.chat.completions.create(
-            model=self.fast_model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.3,
-            max_tokens=800,
+        # Search real catalogue
+        candidates = BusinessCatalogue.search(
+            query=query,
+            top_k=top_k * 2,
+            min_stars=3.5
         )
 
-        raw = response.choices[0].message.content.strip()
-        raw = raw.replace("```json", "").replace("```", "").strip()
+        # Filter out items already in user history
+        history_ids = {r.item_id for r in profile.review_history}
+        candidates = [c for c in candidates if c["item_id"] not in history_ids]
 
-        try:
-            data = json.loads(raw)
-            state["candidates"] = data.get("candidates", [])
-        except (json.JSONDecodeError, ValueError) as e:
-            state["error"] = f"Preference retrieval parse failed: {e}"
+        if not candidates:
+            state["error"] = "Preference retrieval returned no candidates"
             return state
 
+        state["candidates"] = candidates[:top_k * 2]
         return state
-    
+
 
     async def rank_candidates(self, state: TaskBState) -> TaskBState:
         if state.get("error"):
@@ -244,7 +335,7 @@ class AgentB:
             model=self.large_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.3,
-            max_tokens=1500,
+            max_tokens=4000,
         )
 
         raw = response.choices[0].message.content.strip()

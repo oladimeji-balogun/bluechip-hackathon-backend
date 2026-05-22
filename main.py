@@ -6,12 +6,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api.task_a import router as task_a_router
 from src.api.task_b import router as task_b_router
 from src.core.profile_store import ProfileStore
+from src.services.catalogue import BusinessCatalogue
 from src.config import settings
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await ProfileStore.load(settings.PROFILE_STORE_PATH)
+    BusinessCatalogue.load(settings.CATALOGUE_PATH)
     yield
 
 

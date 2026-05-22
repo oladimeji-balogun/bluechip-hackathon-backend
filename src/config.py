@@ -9,7 +9,10 @@ class Settings(BaseSettings):
     TASK_B_MODEL: str = ""
     RATING_MODEL: str = ""
 
+
+
     PROFILE_STORE_PATH: str = ""
+    CATALOGUE_PATH: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env", 

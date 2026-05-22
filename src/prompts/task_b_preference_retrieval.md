@@ -48,9 +48,8 @@ Rules:
 
 These candidates go to a ranking stage next — prioritise quality and variety.
 
-Return ONLY valid JSON with no markdown formatting:
 
-{
+<!-- {
   "candidates": [
     {
       "item_id": "<short unique id like pref_001>",
@@ -59,6 +58,22 @@ Return ONLY valid JSON with no markdown formatting:
       "description": "<one sentence grounded in this user's specific values>",
       "avg_rating": <float between 3.0 and 5.0>,
       "price_range": "<$ or $$ or $$$ or $$$$>"
+    }
+  ]
+} -->
+
+
+Return ONLY valid JSON with no markdown formatting:
+
+{
+  "candidates": [
+    {
+      "item_id": "<pref_001>",
+      "name": "<name>",
+      "category": "<category>",
+      "description": "<brief>",
+      "avg_rating": 4.2,
+      "price_range": "$$"
     }
   ]
 }

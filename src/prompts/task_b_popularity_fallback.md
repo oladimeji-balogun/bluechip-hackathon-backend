@@ -30,7 +30,7 @@ Favour variety over repetition — do not generate similar items back to back.
 
 Return ONLY valid JSON with no markdown formatting:
 
-{
+<!-- {
   "candidates": [
     {
       "item_id": "<short unique id like pop_001>",
@@ -39,6 +39,22 @@ Return ONLY valid JSON with no markdown formatting:
       "description": "<one sentence — what makes this broadly appealing>",
       "avg_rating": <float between 3.5 and 5.0>,
       "price_range": "<$ or $$ or $$$ or $$$$>"
+    }
+  ]
+} -->
+
+
+Return ONLY valid JSON with no markdown formatting:
+
+{
+  "candidates": [
+    {
+      "item_id": "<pref_001>",
+      "name": "<name>",
+      "category": "<category>",
+      "description": "<brief>",
+      "avg_rating": 4.2,
+      "price_range": "$$"
     }
   ]
 }

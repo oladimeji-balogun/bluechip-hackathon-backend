@@ -7,6 +7,12 @@ from .state import TaskBState
 def route_strategy(state: TaskBState) -> str:
     if state.get("error"):
         return "build_response"
+    
+    # hard override for cold start so as no to trust the LLM strategy
+    profile = state["profile"]
+    if profile.tier == "cold" or profile.total_reviews < 5:
+        return "popularity_fallback"
+    
     strategy = state.get("strategy", "preference_retrieval")
     if strategy == "popularity_fallback":
         return "popularity_fallback"

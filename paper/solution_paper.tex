@@ -1,0 +1,462 @@
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{parskip}
+\usepackage{titlesec}
+
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    urlcolor=blue,
+    citecolor=blue
+}
+
+\titleformat{\section}{\large\bfseries}{}{0em}{}[\titlerule]
+\titleformat{\subsection}{\normalsize\bfseries}{}{0em}{}
+
+\title{
+    \Large \textbf{Behavioural User Modelling and Personalised Recommendation} \\
+    \large \textbf{Using LLM Agents with Agentic Workflows} \\
+    \vspace{0.5em}
+    \normalsize DSN $\times$ BCT LLM Agent Challenge --- Solution Write-up
+}
+
+\author{
+    Oladimeji Balogun \and
+    Timothy Ayelagbe \and
+    Glory Bagai \and
+    Promise Akinlua
+}
+
+\date{May 2026}
+
+\begin{document}
+
+\maketitle
+
+% ─────────────────────────────────────────────────────────────
+\section{What We Built}
+
+We built a two-task LLM agent system that understands users deeply enough
+to simulate their behaviour. Given a user's review history, our system can
+predict what they would write and rate about an item they have never seen
+(Task A), and recommend items they would genuinely enjoy (Task B).
+
+Both tasks are served as a containerised FastAPI application with two
+endpoints, backed by 10,000 user profiles built from the Yelp Academic
+Dataset and a BM25-indexed catalogue of 78,982 businesses.
+
+The live system is available at:
+\begin{center}
+\url{https://github.com/oladimeji-balogun/bluechip-hackathon-backend}
+\end{center}
+
+% ─────────────────────────────────────────────────────────────
+\section{Our Approach}
+
+The core insight driving our design is that both tasks share the same
+foundation: a rich understanding of who the user is. Rather than building
+two separate systems, we built one shared \texttt{UserProfile} schema and
+fed it into two different agents. This meant we only had to solve the hard
+problem of user understanding once.
+
+We also made a deliberate choice to use \textbf{agentic workflows} rather
+than single LLM calls. A single prompt asking an LLM to ``generate a
+review for this user'' produces generic output. An agent that first
+analyses the user's voice, then analyses the item, then predicts a rating,
+then generates a review with that rating as an anchor produces output that
+is measurably more faithful to the user's real behaviour. The reasoning
+steps are explicit and inspectable, which matters both for quality and for
+being able to explain what the system is doing.
+
+We chose \textbf{LangGraph} as our orchestration framework because it
+models agentic workflows as explicit state machines. Every node is a named
+reasoning step. Every edge is a deliberate transition. Before writing a
+single line of code, we drew the two state machines by hand and walked the
+team through each node and what it was responsible for. That clarity of
+design carried through to the implementation.
+
+For the LLM backbone we used \textbf{Groq} with two Llama models:
+\texttt{llama-3.3-70b-versatile} for tasks requiring nuanced reasoning and
+generation, and \texttt{llama-3.1-8b-instant} for tasks requiring fast,
+structured JSON output. This split gave us quality where it mattered and
+speed where it did not.
+
+All prompts are stored as \textbf{Jinja2-rendered Markdown templates},
+completely separate from the agent code. This was a deliberate engineering
+decision: prompt iteration is a different activity from code changes, and
+mixing the two into the same files slows both down.
+
+% ─────────────────────────────────────────────────────────────
+\section{System Architecture}
+
+\subsection{The UserProfile}
+
+Everything in the system depends on the \texttt{UserProfile}. We built it
+to capture five things about a user: how they rate (average stars, standard
+deviation, whether they tend to rate high or low, their full star
+distribution), how they write (average review length, tone classification
+across five classes, formality score, common phrases, emoji usage), what
+they prefer (top engaged categories, consistently avoided categories,
+cross-domain signals), their recent history (last 20 reviews, capped at
+300 characters each to keep LLM context lean), and their cultural context
+(Nigerian food terms, location references, and Pidgin English markers
+detected from review text).
+
+Users are classified into four tiers by review count: cold (fewer than 5),
+light (5--20), active (21--100), and power (more than 100). This tier is
+the primary signal for routing in Task B.
+
+We built profiles for 10,000 Yelp users, scanning the full review file to
+ensure every user had their complete review history. The resulting
+distribution was: 29.8\% cold, 38.5\% light, 23.9\% active, and 7.8\%
+power users. Every profile is loaded into memory at server startup so both
+agents have instant access at inference time.
+
+\subsection{Architecture Diagram}
+
+\begin{figure}[h]
+\centering
+% TODO: Replace with architecture diagram image
+% \includegraphics[width=0.9\textwidth]{architecture.png}
+\fbox{\parbox{0.85\textwidth}{\centering\vspace{2cm}
+\textit{[Architecture diagram to be inserted ---}\\
+\textit{shows Yelp data flowing through ProfileBuilder into the shared}\\
+\textit{UserProfile Store, then branching into Task A and Task B agents,}\\
+\textit{each served by a FastAPI endpoint]}
+\vspace{2cm}}}
+\caption{System architecture overview}
+\label{fig:arch}
+\end{figure}
+
+\subsection{Technology Stack}
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Component} & \textbf{Technology} \\
+\midrule
+API Framework         & FastAPI \\
+Agent Orchestration   & LangGraph \\
+LLM (reasoning)       & Llama 3.3 70B via Groq \\
+LLM (structured outputs) & Llama 3.1 8B via Groq \\
+Prompt Templating     & Jinja2 (.md templates) \\
+Business Retrieval    & BM25 (rank-bm25) \\
+Data Validation       & Pydantic v2 \\
+Containerisation      & Docker \\
+Dataset               & Yelp Academic Dataset \\
+\bottomrule
+\end{tabular}
+\caption{Technology stack}
+\label{tab:stack}
+\end{table}
+
+% ─────────────────────────────────────────────────────────────
+\section{Task A: User Modeling}
+
+\subsection{The Problem}
+
+We need to generate a star rating and a written review for a user-item
+pair where the user has never reviewed that item. The output has to sound
+like that specific user wrote it, not like a generic AI assistant.
+
+\subsection{The Pipeline}
+
+We designed Task A as a five-node LangGraph state machine. Here is what
+each node does and why we separated them.
+
+\textbf{analyze\_user} reads the \texttt{UserProfile} and extracts a
+structured voice fingerprint: tone class, average review length, common
+phrases, rating tendencies, and Nigerian context signals. This is pure
+deterministic logic with no LLM call. We separated it from the LLM nodes
+because it is always fast and always correct, and it sets up clean context
+for everything downstream.
+
+\textbf{analyze\_item} reads the item metadata and checks how well it maps
+to the user's known preferences: does the category match their top
+categories or their avoided ones, and how does the community rating compare
+to this user's average expectation? Again, no LLM call. Two cheap
+deterministic nodes before any expensive inference.
+
+\textbf{predict\_rating} is the first LLM call, using
+\texttt{llama-3.1-8b-instant} for speed. The prompt contains the user's
+rating distribution, category preferences, and ten recent review snippets.
+We run at temperature 0.1 for consistency. The node returns a float between
+1.0 and 5.0 and a one-sentence reasoning string.
+
+\textbf{generate\_review} is the most important node. We call
+\texttt{llama-3.3-70b-versatile} with a detailed voice profile prompt that
+includes the user's writing statistics, tone-specific instructions, three
+real reviews from the user's history as few-shot examples, and the
+predicted rating as an anchor for the emotional register. The prompt
+explicitly instructs the model to write as a specific human, not as an AI.
+Temperature is 0.8 for natural variation.
+
+\textbf{apply\_nigerian\_context} is a conditional node that only runs when
+Nigerian context is active. It makes a second LLM pass to naturally weave
+in Pidgin English phrases and local references without changing the
+sentiment or length.
+
+\begin{figure}[h]
+\centering
+% TODO: Replace with Task A state machine diagram
+% \includegraphics[width=0.75\textwidth]{task_a_graph.png}
+\fbox{\parbox{0.85\textwidth}{\centering\vspace{2cm}
+\textit{[Task A state machine diagram to be inserted ---}\\
+\textit{linear pipeline: analyze\_user, analyze\_item, predict\_rating,}\\
+\textit{generate\_review, conditional apply\_nigerian\_context, END]}
+\vspace{2cm}}}
+\caption{Task A LangGraph state machine}
+\label{fig:task_a}
+\end{figure}
+
+\subsection{API Endpoints}
+
+The system exposes two endpoints, both accepting JSON and returning JSON.
+
+\textbf{Task A: Generate Review}
+
+\begin{verbatim}
+POST /api/v1/task-a/generate
+
+{
+  "user_id": "MGPQVLsODMm9ZtYQW-g_OA",   // Yelp user ID (or pass full profile)
+  "nigerian_mode": false,                  // activate Nigerian context
+  "item": {
+    "item_id": "biz_001",
+    "name": "The Melting Pot",
+    "category": "Restaurants",
+    "subcategories": ["Fondue", "Fine Dining"],
+    "avg_community_rating": 4.1,
+    "description": "Upscale fondue restaurant.",
+    "price_range": "$$$"
+  }
+}
+\end{verbatim}
+
+Response includes \texttt{predicted\_stars}, \texttt{predicted\_stars\_rounded},
+\texttt{generated\_review}, \texttt{confidence}, and \texttt{reasoning}.
+
+
+
+\textbf{Task B: Get Recommendations}
+
+\begin{verbatim}
+POST /api/v1/task-b/recommend
+
+{
+  "user_id": "MGPQVLsODMm9ZtYQW-g_OA",
+  "domain": "restaurants",
+  "context": "Looking for somewhere to eat Friday evening",
+  "top_k": 10,
+  "nigerian_mode": false,
+  "conversation_history": []             // supports multi-turn
+}
+\end{verbatim}
+
+Response includes a ranked \texttt{recommendations} list with
+\texttt{item\_id}, \texttt{item\_name}, \texttt{predicted\_rating},
+\texttt{relevance\_score}, \texttt{explanation}, and flags for
+\texttt{cold\_start\_used} and \texttt{cross\_domain\_used}.
+
+Both endpoints accept either a \texttt{user\_id} for lookup against the
+profile store, or a full inline \texttt{user\_profile} object for testing
+without a pre-built profile.
+
+\subsection{Nigerian Contextualisation}
+
+We treated Nigerian contextualisation as a first-class design requirement,
+not a last-minute addition. The profile builder scans every review for a
+curated vocabulary of Nigerian food terms (suya, jollof, egusi, buka),
+location names (Lagos, Abuja, Port Harcourt), and Pidgin English markers
+(e dey, correct, sabi, wahala). When these signals are present, the
+generation prompt activates a dedicated Nigerian voice block that instructs
+the model on Pidgin usage, local cultural references, and price sensitivity.
+
+The results speak for themselves. A user whose reviews reference Barcelos
+in VI and use phrases like ``e dey sweet'' receives generated reviews that
+naturally continue in that voice.
+
+% ─────────────────────────────────────────────────────────────
+\section{Task B: Recommendation}
+
+\subsection{The Problem}
+
+Recommendation is harder than review generation because it cannot be solved
+with a single strategy. An active user with 127 restaurant reviews needs
+deep preference matching. A cold-start user with 2 reviews needs something
+completely different. A user asking for recommendations outside their usual
+domain needs cross-domain preference transfer. We had to handle all three
+and handle them correctly.
+
+\subsection{The Pipeline}
+
+Task B is a seven-node LangGraph state machine with a three-way conditional
+branch at the retrieval stage. We drew this out by hand before implementing
+it because the routing logic needed to be completely clear before writing
+code.
+
+\textbf{analyze\_user} calls \texttt{llama-3.3-70b-versatile} with the
+full profile and request context. It returns a structured JSON object
+capturing what the user genuinely values, what consistently disappoints
+them, their domain familiarity, transferable preference signals, price
+sensitivity, and a recommended retrieval strategy.
+
+\textbf{route\_strategy} is a conditional edge function, not an LLM call.
+It reads the state and routes to one of three retrieval nodes. We added a
+hard override here: users with fewer than 5 reviews always route to
+popularity fallback, regardless of what the LLM recommends. We learned
+from testing that LLMs can be overconfident when routing cold users, so we
+enforced the rule in code.
+
+The three retrieval nodes all query the real Yelp business catalogue via
+BM25. \textbf{popularity\_fallback} constructs a query from the user's
+category hint and sets a minimum 4.0-star threshold. 
+\textbf{cross\_domain\_retrieval} builds a query from the LLM-extracted
+transferable signals and the requested domain. \textbf{preference\_retrieval}
+builds a query from the user's top categories and context, filtering out
+already-reviewed businesses.
+
+\textbf{rank\_candidates} is where all three paths converge. The LLM
+receives the full user analysis and the candidate list, and reasons over
+each candidate against the user's specific values, dislikes, and price
+sensitivity. This is the step that makes the system an agent rather than a
+retrieval pipeline.
+
+\textbf{apply\_context} handles multi-turn conversations. If conversation
+history is present, a second LLM pass re-weights the ranking to honour
+what the user said in previous turns.
+
+\begin{figure}[h]
+\centering
+% TODO: Replace with Task B state machine diagram
+% \includegraphics[width=0.9\textwidth]{task_b_graph.png}
+\fbox{\parbox{0.85\textwidth}{\centering\vspace{2.5cm}
+\textit{[Task B state machine diagram to be inserted ---}\\
+\textit{analyze\_user, route\_strategy branching to three retrieval nodes,}\\
+\textit{all converging at rank\_candidates, apply\_context, END]}
+\vspace{2.5cm}}}
+\caption{Task B LangGraph state machine}
+\label{fig:task_b}
+\end{figure}
+
+\subsection{Why We Replaced LLM-Generated Candidates with BM25}
+
+Early in development, we had the LLM generate candidate items from scratch.
+The recommendations were plausible and well-reasoned, but they were
+completely unverifiable: the LLM invented business names and synthetic IDs
+that did not correspond to real places. We could not evaluate them against
+ground truth and we could not trust them in a production context.
+
+We replaced this with a real business catalogue built from Yelp's
+\texttt{business.json}: 78,982 open businesses with at least 10 reviews,
+indexed by BM25. The retrieval nodes now return real Yelp business IDs.
+The LLM's role shifted from inventing candidates to reasoning over real
+ones. This is a better division of labour: retrieval is fast and
+deterministic, reasoning is where the LLM adds genuine value.
+
+% ─────────────────────────────────────────────────────────────
+\section{Evaluation and Results}
+
+\subsection{Task A}
+
+We evaluated using a leave-one-out protocol: for each user, we identified
+reviews not in their profile history, used the most recent as ground truth,
+and asked the agent to generate a review for that same item. This tests
+genuine generalisation since the agent never saw the ground truth review.
+
+\begin{table}[h]
+\centering
+\begin{tabular}{lr}
+\toprule
+\textbf{Metric} & \textbf{Score} \\
+\midrule
+ROUGE-1         & 0.3068 \\
+ROUGE-2         & 0.0418 \\
+ROUGE-L         & 0.1495 \\
+BERTScore F1    & 0.8364 \\
+Rating RMSE     & 1.1187 \\
+Rating MAE      & 0.8521 \\
+\midrule
+Samples         & 48 \\
+\bottomrule
+\end{tabular}
+\caption{Task A evaluation results}
+\label{tab:task_a}
+\end{table}
+
+BERTScore F1 of 0.836 is the number we are most confident in. It measures
+semantic similarity using contextual embeddings, which captures meaning
+even when exact words differ. Two humans writing about the same restaurant
+rarely use the same phrases; BERTScore correctly rewards semantic alignment
+over surface matching. Rating RMSE of 1.119 is a meaningful improvement
+over a random baseline (estimated at approximately 1.8 over the 1-5 star
+range).
+
+\subsection{Task B}
+
+Standard ranking metrics (NDCG, Hit Rate, Precision) require matching
+recommended item IDs against a ground truth set. Our retrieval returns real
+Yelp IDs, but the probability of exact overlap between BM25-retrieved
+candidates and a specific user's held-out items is low given 78,982
+catalogue businesses. Automated metrics were therefore uninformative.
+
+We instead conducted manual evaluation of 10 recommendation outputs. Active
+users consistently received category-matched recommendations respecting
+their price sensitivity. Cold-start users were correctly routed to
+popularity fallback and received broadly well-liked items. Nigerian mode
+produced culturally grounded explanations with appropriate local references.
+
+% ─────────────────────────────────────────────────────────────
+\section{What We Would Do With More Time}
+
+\textbf{Dense retrieval.} BM25 matches keywords. A user who values
+``intimate atmosphere'' and ``attentive service'' cannot express those
+preferences in a keyword query. Replacing BM25 with sentence embedding
+retrieval over business descriptions would capture semantic preference
+signals that keyword search cannot. This is the single most impactful
+improvement available.
+
+\textbf{Fine-tuned review generation.} Our review generation relies on
+prompt engineering with a general-purpose model. Fine-tuning Llama 3.1 8B
+on paired (user profile, real review) examples from the Yelp dataset would
+produce a specialised model with stronger behavioural fidelity and lower
+inference cost.
+
+\textbf{Nigerian context classifier.} The current heuristic detector
+produces false positives. Common English expressions like ``e sweet''
+occasionally trigger Nigerian mode for non-Nigerian users. A lightweight
+supervised classifier trained on labelled reviews would reduce this
+significantly.
+
+\textbf{Richer item features.} Rating prediction is currently limited by
+sparse item metadata (category, community rating, price range). Adding
+review sentiment distributions and attribute vectors would improve RMSE.
+
+\textbf{Real-time profile updates.} Profiles are built offline. A
+production system would update them incrementally as users generate new
+reviews, keeping the behavioural signal current.
+
+% ─────────────────────────────────────────────────────────────
+\section{Conclusion}
+
+We built a system that treats users as the dynamic, context-sensitive
+agents they actually are. Every design decision, from the shared
+\texttt{UserProfile} schema to the explicit LangGraph state machines to
+the BM25 catalogue retrieval, was made deliberately and with a clear
+reason. We are proud of the architecture, the Nigerian contextualisation
+work, and the fact that we built it from the ground up with full
+understanding of every component.
+
+The full codebase including profile builder, LangGraph agents, BM25
+catalogue, evaluation scripts, and Docker configuration is at:
+\begin{center}
+\url{https://github.com/oladimeji-balogun/bluechip-hackathon-backend}
+\end{center}
+
+\end{document}

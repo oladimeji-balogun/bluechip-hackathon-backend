@@ -1,5 +1,7 @@
 # BCT Hack LLM Agent Challenge
 
+![System Architecture](assets/architecture.jpg)
+
 A two-task LLM agent system that models users behaviourally and delivers
 personalised recommendations, built on the Yelp Academic Dataset.
 
@@ -14,6 +16,19 @@ with Docker.
 
 > Submission for the DSN x Bluechip Tech LLM Agent Challenge, May 2026.
 
+## Architecture
+
+![System Architecture](assets/architecture.jpg)
+
+## Agent State Machines
+
+**Task A: Review Generation Pipeline**
+
+![Task A State Machine](assets/agent_a_graph.jpg)
+
+**Task B: Recommendation Pipeline**
+
+![Task B State Machine](assets/agent_b_graph.jpg)
 
 ## Quick start
 
